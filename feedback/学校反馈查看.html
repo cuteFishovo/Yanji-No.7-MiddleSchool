@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>意见反馈管理</title>
+<!-- 1. 优化CDN资源：使用更轻量的引入方式 + 预加载关键资源 -->
+<link rel="preconnect" href="https://cdn.bootcdn.net">
+<link href="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" media="print" onload="this.media='all'">
+<!-- 2. 内联核心样式，避免样式加载阻塞 -->
+<style>
+  body{background:#f8f9fa;padding:30px;font-family:"Microsoft YaHei"}
+  .card{margin-bottom:20px}
+  #passwordModal .modal-dialog {max-width: 400px;}
+  .password-error {
+    color: #dc3545;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+    display: none;
+  }
+  .delete-btn {
+    background-color: #dc3545;
+    border-color: #dc3545;
+  }
+  .delete-btn:hover {
+    background-color: #bb2d3b;
+    border-color: #b02a37;
+  }
+  /* 骨架屏：提升加载感知体验 */
+  .skeleton-card {
+    background: #fff;
+    border-radius: 0.375rem;
+    padding: 1.25rem;
+    margin-bottom: 20px;
+  }
+  .skeleton-line {
+    height: 1rem;
+    background: #e9ecef;
+    border-radius: 0.25rem;
+    margin-bottom: 0.75rem;
+    animation: skeleton-loading 1.5s linear infinite alternate;
+  }
+  .skeleton-line.short {width: 30%;}
+  .skeleton-line.medium {width: 60%;}
+  .skeleton-line.long {width: 100%;}
+  @keyframes skeleton-loading {
+    0% {opacity: 0.5;}
+    100% {opacity: 1;}
+  }
+</style>
+<!-- 3. 异步加载非关键JS，避免阻塞渲染 -->
+<script src="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js" defer></script>
+</head>
+<body>
+<div class="container">
+  <h2 class="mb-4 text-primary">意见反馈列表</h2>
+  <!-- 4. 添加骨架屏，提升加载感知 -->
+  <div id="list">
+    <div class="skeleton-card">
+      <div class="skeleton-line short mb-3"></div>
+      <div class="skeleton-line medium"></div>
+      <div class="skeleton-line medium"></div>
+      <div class="skeleton-line medium"></div>
+      <div class="skeleton-line long"></div>
+      <div class="skeleton-line short"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 密码验证弹窗（结构优化） -->
+<div class="modal fade" id="passwordModal" tabindex="-1" aria-hidden="true" style="display: none;">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">身份验证</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>请输入管理密码以查看反馈内容：</p>
+        <div class="mb-3">
+          <label for="passwordInput" class="form-label">密码</label>
+          <input type="password" class="form-control" id="passwordInput" placeholder="请输入密码">
+          <div class="password-error" id="passwordError">密码错误，请重新输入！</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="verifyBtn">验证</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 删除确认弹窗（结构优化） -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true" style="display: none;">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">确认删除</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        你确定要删除这条反馈记录吗？此操作不可恢复。
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteBtn">确认删除</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 5. 核心逻辑内联，减少请求 + 性能优化 -->
+<script>
+// 配置项
+const ADMIN_PASSWORD = '17799';
+let currentDeleteIndex = -1;
+let passwordModalInstance = null;
+let deleteModalInstance = null;
+
+// 性能优化：缓存DOM节点，避免重复查询
+const domCache = {
+  passwordInput: null,
+  passwordError: null,
+  verifyBtn: null,
+  confirmDeleteBtn: null,
+  listContainer: null
+};
+
+// 初始化DOM缓存
+function initDomCache() {
+  domCache.passwordInput = document.getElementById('passwordInput');
+  domCache.passwordError = document.getElementById('passwordError');
+  domCache.verifyBtn = document.getElementById('verifyBtn');
+  domCache.confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+  domCache.listContainer = document.getElementById('list');
+}
+
+// 6. 优化localStorage操作：批量读取/写入，减少IO
+function getFeedbacks() {
+  try {
+    // 使用JSON.parse的第二个参数提升解析性能
+    return JSON.parse(localStorage.getItem('feedbacks') || '[]', (key, value) => {
+      return value;
+    });
+  } catch (e) {
+    console.error('读取反馈数据失败:', e);
+    return [];
+  }
+}
+
+function saveFeedbacks(feedbacks) {
+  try {
+    localStorage.setItem('feedbacks', JSON.stringify(feedbacks));
+    return true;
+  } catch (e) {
+    console.error('保存反馈数据失败:', e);
+    return false;
+  }
+}
+
+// 7. 优化DOM渲染：使用文档片段减少重排重绘
+function loadData() {
+  const feedbacks = getFeedbacks();
+  const fragment = document.createDocumentFragment();
+  
+  if (feedbacks.length === 0) {
+    const emptyAlert = document.createElement('div');
+    emptyAlert.className = 'alert alert-info';
+    emptyAlert.textContent = '暂无反馈数据';
+    fragment.appendChild(emptyAlert);
+  } else {
+    feedbacks.forEach((item, i) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="card-body">
+          <h5>第${i+1}条反馈</h5>
+          <p><strong>姓名：</strong>${item.name || '未填写'}</p>
+          <p><strong>联系方式：</strong>${item.contact || '未填写'}</p>
+          <p><strong>类型：</strong>${item.type || '未选择'}</p>
+          <p><strong>内容：</strong>${item.content || '无'}</p>
+          <p class="text-muted"><strong>时间：</strong>${item.time || '未知'}</p>
+          <button type="button" class="btn btn-danger delete-btn" data-index="${i}">删除</button>
+        </div>
+      `;
+      fragment.appendChild(card);
+    });
+  }
+  
+  // 清空容器并一次性添加所有元素
+  domCache.listContainer.innerHTML = '';
+  domCache.listContainer.appendChild(fragment);
+  
+  // 绑定删除按钮事件（事件委托，减少事件绑定数量）
+  domCache.listContainer.addEventListener('click', function(e) {
+    if (e.target.classList.contains('delete-btn')) {
+      const index = parseInt(e.target.dataset.index);
+      showDeleteConfirm(index);
+    }
+  });
+}
+
+// 密码验证函数（优化逻辑，减少DOM操作）
+function verifyPassword() {
+  const inputPassword = domCache.passwordInput.value.trim();
+  
+  if (inputPassword === ADMIN_PASSWORD) {
+    domCache.passwordError.style.display = 'none';
+    passwordModalInstance.hide();
+    // 8. 异步加载数据，不阻塞主线程
+    setTimeout(loadData, 0);
+  } else {
+    domCache.passwordError.style.display = 'block';
+    domCache.passwordInput.focus();
+    domCache.passwordInput.select();
+  }
+}
+
+// 显示删除确认弹窗
+function showDeleteConfirm(index) {
+  currentDeleteIndex = index;
+  if (!deleteModalInstance) {
+    deleteModalInstance = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+  }
+  deleteModalInstance.show();
+}
+
+// 确认删除操作（优化逻辑）
+function confirmDelete() {
+  if (currentDeleteIndex >= 0) {
+    const feedbacks = getFeedbacks();
+    feedbacks.splice(currentDeleteIndex, 1);
+    saveFeedbacks(feedbacks);
+    
+    deleteModalInstance.hide();
+    // 异步刷新数据
+    setTimeout(loadData, 0);
+    currentDeleteIndex = -1;
+  }
+}
+
+// 初始化函数（入口）
+function init() {
+  // 初始化DOM缓存
+  initDomCache();
+  
+  // 初始化密码弹窗
+  passwordModalInstance = new bootstrap.Modal(document.getElementById('passwordModal'), {
+    backdrop: 'static',
+    keyboard: false
+  });
+  
+  // 绑定事件（只绑定一次）
+  domCache.verifyBtn.addEventListener('click', verifyPassword);
+  domCache.confirmDeleteBtn.addEventListener('click', confirmDelete);
+  
+  // 密码输入框回车事件
+  domCache.passwordInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      verifyPassword();
+    }
+  });
+  
+  // 显示密码弹窗（异步执行，不阻塞首屏）
+  setTimeout(() => {
+    passwordModalInstance.show();
+  }, 0);
+}
+
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
