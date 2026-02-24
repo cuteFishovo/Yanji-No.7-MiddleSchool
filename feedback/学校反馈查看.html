@@ -4,10 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>意见反馈管理</title>
-<!-- 1. 优化CDN资源：使用更轻量的引入方式 + 预加载关键资源 -->
 <link rel="preconnect" href="https://cdn.bootcdn.net">
 <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" media="print" onload="this.media='all'">
-<!-- 2. 内联核心样式，避免样式加载阻塞 -->
 <style>
   body{background:#f8f9fa;padding:30px;font-family:"Microsoft YaHei"}
   .card{margin-bottom:20px}
@@ -26,7 +24,6 @@
     background-color: #bb2d3b;
     border-color: #b02a37;
   }
-  /* 骨架屏：提升加载感知体验 */
   .skeleton-card {
     background: #fff;
     border-radius: 0.375rem;
@@ -48,13 +45,11 @@
     100% {opacity: 1;}
   }
 </style>
-<!-- 3. 异步加载非关键JS，避免阻塞渲染 -->
 <script src="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js" defer></script>
 </head>
 <body>
 <div class="container">
   <h2 class="mb-4 text-primary">意见反馈列表</h2>
-  <!-- 4. 添加骨架屏，提升加载感知 -->
   <div id="list">
     <div class="skeleton-card">
       <div class="skeleton-line short mb-3"></div>
@@ -67,7 +62,6 @@
   </div>
 </div>
 
-<!-- 密码验证弹窗（结构优化） -->
 <div class="modal fade" id="passwordModal" tabindex="-1" aria-hidden="true" style="display: none;">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -91,7 +85,6 @@
   </div>
 </div>
 
-<!-- 删除确认弹窗（结构优化） -->
 <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-hidden="true" style="display: none;">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -110,15 +103,12 @@
   </div>
 </div>
 
-<!-- 5. 核心逻辑内联，减少请求 + 性能优化 -->
 <script>
-// 配置项
 const ADMIN_PASSWORD = '17799';
 let currentDeleteIndex = -1;
 let passwordModalInstance = null;
 let deleteModalInstance = null;
 
-// 性能优化：缓存DOM节点，避免重复查询
 const domCache = {
   passwordInput: null,
   passwordError: null,
@@ -127,7 +117,6 @@ const domCache = {
   listContainer: null
 };
 
-// 初始化DOM缓存
 function initDomCache() {
   domCache.passwordInput = document.getElementById('passwordInput');
   domCache.passwordError = document.getElementById('passwordError');
@@ -136,10 +125,8 @@ function initDomCache() {
   domCache.listContainer = document.getElementById('list');
 }
 
-// 6. 优化localStorage操作：批量读取/写入，减少IO
 function getFeedbacks() {
   try {
-    // 使用JSON.parse的第二个参数提升解析性能
     return JSON.parse(localStorage.getItem('feedbacks') || '[]', (key, value) => {
       return value;
     });
@@ -159,7 +146,6 @@ function saveFeedbacks(feedbacks) {
   }
 }
 
-// 7. 优化DOM渲染：使用文档片段减少重排重绘
 function loadData() {
   const feedbacks = getFeedbacks();
   const fragment = document.createDocumentFragment();
@@ -188,11 +174,9 @@ function loadData() {
     });
   }
   
-  // 清空容器并一次性添加所有元素
   domCache.listContainer.innerHTML = '';
   domCache.listContainer.appendChild(fragment);
   
-  // 绑定删除按钮事件（事件委托，减少事件绑定数量）
   domCache.listContainer.addEventListener('click', function(e) {
     if (e.target.classList.contains('delete-btn')) {
       const index = parseInt(e.target.dataset.index);
@@ -201,14 +185,12 @@ function loadData() {
   });
 }
 
-// 密码验证函数（优化逻辑，减少DOM操作）
 function verifyPassword() {
   const inputPassword = domCache.passwordInput.value.trim();
   
   if (inputPassword === ADMIN_PASSWORD) {
     domCache.passwordError.style.display = 'none';
     passwordModalInstance.hide();
-    // 8. 异步加载数据，不阻塞主线程
     setTimeout(loadData, 0);
   } else {
     domCache.passwordError.style.display = 'block';
@@ -226,7 +208,6 @@ function showDeleteConfirm(index) {
   deleteModalInstance.show();
 }
 
-// 确认删除操作（优化逻辑）
 function confirmDelete() {
   if (currentDeleteIndex >= 0) {
     const feedbacks = getFeedbacks();
@@ -234,15 +215,12 @@ function confirmDelete() {
     saveFeedbacks(feedbacks);
     
     deleteModalInstance.hide();
-    // 异步刷新数据
     setTimeout(loadData, 0);
     currentDeleteIndex = -1;
   }
 }
 
-// 初始化函数（入口）
 function init() {
-  // 初始化DOM缓存
   initDomCache();
   
   // 初始化密码弹窗
